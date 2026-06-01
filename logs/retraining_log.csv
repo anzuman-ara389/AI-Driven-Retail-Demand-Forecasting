@@ -1,11 +1,2 @@
-timestamp,status,reason,mae,rmse,r2,training_rows
-2026-05-15T10:20:39.398349,skipped,no_drift_detected,,,,
-2026-05-15T12:08:04.772311,skipped,no_drift_detected,,,,
-2026-05-16T19:09:22.782322,skipped,no_drift_detected,,,,
-2026-05-16T20:13:36.976812,skipped,no_drift_detected,,,,
-2026-05-16T20:19:42.679403,retrained,drift_detected,253.9757,704.9541,0.9055,421985
-2026-05-16T20:37:08.379205,retrained,drift_detected,253.9757,704.9541,0.9055,421985
-2026-05-16T20:51:46.431039,retrained,drift_detected,253.9757,704.9541,0.9055,421985,models/demand_model_20260516_205104.pkl
-2026-05-16T22:07:55.714260,retrained,drift_detected,253.9757,704.9541,0.9055,421985,models/demand_model_20260516_220712.pkl
-2026-05-17T11:55:33.707548,retrained,drift_detected,253.5165,682.4729,0.9097,422290,models/demand_model_20260517_115508.pkl
-2026-05-17T12:07:19.291933,retrained,drift_detected,253.5165,682.4729,0.9097,422290,models/demand_model_20260517_120648.pkl
+timestamp,status,reason,mae,rmse,r2,training_rows,model_path
+2026-06-01T13:01:00.060493,retrained,drift_detected,253.1114,685.2878,0.9099,421570,models/demand_model_20260601_125957.pkl
