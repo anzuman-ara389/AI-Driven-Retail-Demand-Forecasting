@@ -35,11 +35,11 @@ jobs:
         run: |
           python -m compileall src
 
-      - name: Import project modules
+      - name: Validate core project modules
         run: |
           python -c "from src.database import init_db; init_db()"
-          python -c "from src.live_ingestion import generate_food_sales_record; print(generate_food_sales_record())"
           python -c "from src.drift_detection import calculate_drift_score; print(calculate_drift_score(100, 120))"
+          python -c "from src.inventory_assessment import *; print('Inventory assessment module imported successfully')"
 
       - name: Validate FastAPI health endpoint
         run: |
@@ -55,3 +55,7 @@ jobs:
 
           print("FastAPI health endpoint validation passed.")
           PY
+
+      - name: Run automated tests
+        run: |
+          pytest tests/ -v

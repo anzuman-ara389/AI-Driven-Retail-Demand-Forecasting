@@ -1,22 +1,29 @@
-version: "3.9"
-
 services:
 
-  fastapi:
+  api:
     build: .
-    container_name: food_waste_api
+    container_name: retail-demand-api
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000
     ports:
       - "8000:8000"
     volumes:
-      - .:/app
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./artifacts:/app/artifacts
+      - ./logs:/app/logs
+    restart: unless-stopped
 
-  streamlit:
+  dashboard:
     build: .
-    container_name: food_waste_dashboard
-    command: streamlit run src/frontend.py --server.port 8501 --server.address 0.0.0.0
+    container_name: retail-demand-dashboard
+    command: streamlit run src/frontend.py --server.address 0.0.0.0 --server.port 8501
     ports:
       - "8501:8501"
     volumes:
-      - .:/app
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./artifacts:/app/artifacts
+      - ./logs:/app/logs
     depends_on:
-      - fastapi
+      - api
+    restart: unless-stopped
