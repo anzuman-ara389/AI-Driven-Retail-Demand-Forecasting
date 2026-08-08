@@ -2,15 +2,12 @@ name: MLOps Pipeline Validation
 
 on:
   push:
-    branches: [ main, master ]
-
+    branches:
+      - main
   pull_request:
-    branches: [ main, master ]
-
+    branches:
+      - main
   workflow_dispatch:
-
-  schedule:
-    - cron: "0 0 * * *"
 
 jobs:
   validate-pipeline:
@@ -36,12 +33,28 @@ jobs:
           python -m compileall src
 
       - name: Validate core project modules
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: |
-          python -c "from src.database import init_db; init_db()"
-          python -c "from src.drift_detection import calculate_drift_score; print(calculate_drift_score(100, 120))"
-          python -c "from src.inventory_assessment import *; print('Inventory assessment module imported successfully')"
+          python - <<'PY'
+          from src.database import init_db
+          from src.live_ingestion import generate_food_sales_record
+          from src.drift_detection import calculate_drift_score
+
+          init_db()
+
+          record = generate_food_sales_record()
+          print("Generated retail event:", record)
+
+          score = calculate_drift_score(100, 120)
+          print("Drift score:", score)
+
+          print("Core project module validation passed.")
+          PY
 
       - name: Validate FastAPI health endpoint
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           python - <<'PY'
           from fastapi.testclient import TestClient
@@ -57,7 +70,7 @@ jobs:
           PY
 
       - name: Run automated tests
-  env:
-    PYTHONPATH: ${{ github.workspace }}
-  run: |
-    python -m pytest tests/ -v
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python -m pytest tests/ -v
