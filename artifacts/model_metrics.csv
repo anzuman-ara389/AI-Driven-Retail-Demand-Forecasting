@@ -1,2 +1,2 @@
-model_name,mae,rmse,r2,training_rows,target_column,model_path,latest_model_path,features_path,created_at
-RandomForestRegressor,254.2588,685.2572,0.9087,421592,units_sold,models/demand_model_20260601_132937.pkl,models/demand_model.pkl,models/model_features.pkl,2026-06-01T13:30:04.850630
+model_name,mae,rmse,r2,train_mae,train_rmse,train_r2,cv_rmse_mean,cv_rmse_std,generalization_gap,absolute_gap,training_rows,testing_rows,total_rows,target_column,cv_method,cv_splits,selection_metric,model_path,latest_model_path,features_path,feature_importance_path,created_at
+RandomForestRegressor,215.3552,482.8857,0.9515,178.7884,475.9751,0.9568,784.7618,237.0157,6.9105,6.9105,337256,84314,421570,units_sold,TimeSeriesSplit,3,cv_rmse_mean,models/demand_model_20260808_115735.pkl,models/demand_model.pkl,models/model_features.pkl,artifacts/feature_importance.csv,2026-08-08T11:57:48.011393

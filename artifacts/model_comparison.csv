@@ -1,3 +1,3 @@
-model_name,mae,rmse,r2,training_rows,created_at
-RandomForestRegressor,254.2588,685.2572,0.9087,421592,2026-06-01T13:29:35.598848
-LightGBMRegressor,464.5177,861.3523,0.8557,421592,2026-06-01T13:29:37.798482
+model_name,train_mae,train_rmse,train_r2,mae,rmse,r2,cv_rmse_mean,cv_rmse_std,generalization_gap,absolute_gap,training_rows,testing_rows,cv_splits,created_at
+RandomForestRegressor,178.7884,475.9751,0.9568,215.3552,482.8857,0.9515,784.7618,237.0157,6.9105,6.9105,337256,84314,3,2026-08-08T11:57:21.396623
+XGBoostRegressor,479.792,906.306,0.8434,463.9094,737.6174,0.8868,983.1057,195.5174,-168.6886,168.6886,337256,84314,3,2026-08-08T11:57:35.025213

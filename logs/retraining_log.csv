@@ -1,2 +1,3 @@
-timestamp,status,reason,mae,rmse,r2,training_rows,model_path
-2026-06-01T13:01:00.060493,retrained,drift_detected,253.1114,685.2878,0.9099,421570,models/demand_model_20260601_125957.pkl
+timestamp,status,reason,model_name,mae,rmse,r2,train_rmse,cv_rmse_mean,generalization_gap,training_rows,testing_rows,model_path,error_message
+2026-08-02T16:48:53.008685,retrained,drift_detected,RandomForestRegressor,215.3552,482.8857,0.9515,475.9751,784.7618,6.9105,337256,84314,models/demand_model_20260802_164841.pkl,
+2026-08-08T11:57:49.358772,retrained,drift_detected,RandomForestRegressor,215.3552,482.8857,0.9515,475.9751,784.7618,6.9105,337256,84314,models/demand_model_20260808_115735.pkl,

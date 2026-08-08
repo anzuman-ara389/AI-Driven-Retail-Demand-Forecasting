@@ -3,56 +3,72 @@ from datetime import datetime
 
 import joblib
 import pandas as pd
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
 
-from src.database import get_connection, init_db
-from src.preprocess import preprocess_data
-from src.train import train_model, MODEL_PATH, FEATURE_COLUMNS
-from src.drift_detection import run_drift_check
 from src.auto_retrain import auto_retrain
+from src.database import get_connection, init_db
+from src.drift_detection import run_drift_check
+from src.inventory_assessment import assess_inventory
+from src.llm_recommendation import generate_recommendation
+from src.preprocess import preprocess_data
+from src.train import FEATURE_COLUMNS, MODEL_PATH, train_model
 
 
 app = FastAPI(
-    title="AI-Driven Retail Demand Forecasting and Inventory Optimization API",
-    description=(
-        "AI-driven retail demand forecasting, API ingestion, monitoring, "
-        "retraining, model comparison, and inventory decision support API."
+    title=(
+        "AI-Driven Retail Demand Forecasting and "
+        "Intelligent Inventory Decision Support API"
     ),
-    version="1.0.0"
+    description=(
+        "Demand forecasting, inventory assessment, "
+        "waste-risk classification, monitoring, "
+        "recommendation, and retraining."
+    ),
+    version="2.1.0",
 )
 
 
 class SalesEvent(BaseModel):
     product_name: str = "Dept_1"
     category: str = "A"
-    store_id: int = 1
-    date: str = datetime.now().strftime("%Y-%m-%d")
-    day_of_week: int = datetime.now().weekday()
-    is_weekend: int = 1 if datetime.now().weekday() >= 5 else 0
-    is_holiday: int = 0
-    promotion: int = 0
+    store_id: int = Field(default=1, ge=1, le=45)
+    date: str = Field(
+        default_factory=lambda: datetime.now().strftime("%Y-%m-%d")
+    )
+    day_of_week: int = Field(
+        default_factory=lambda: datetime.now().weekday(),
+        ge=0,
+        le=6,
+    )
+    is_weekend: int = Field(default=0, ge=0, le=1)
+    is_holiday: int = Field(default=0, ge=0, le=1)
+    promotion: int = Field(default=0, ge=0, le=1)
     temperature: float = 20.0
-    current_stock: int = 100
-    units_sold: int = 60
-    unit_price: float = 10.0
-    expiry_days: int = 5
-    waste_quantity: int = 20
+    current_stock: int = Field(default=100, ge=0)
+    units_sold: int = Field(default=60, ge=0)
+    unit_price: float = Field(default=10.0, gt=0)
+    expiry_days: int = Field(default=5, ge=0)
+    waste_quantity: int = Field(default=0, ge=0)
     source: str = "api_event"
 
 
 class PredictionRequest(BaseModel):
     product_name: str = "Dept_1"
     category: str = "A"
-    store_id: int = 1
-    day_of_week: int = datetime.now().weekday()
-    is_weekend: int = 1 if datetime.now().weekday() >= 5 else 0
-    is_holiday: int = 0
-    promotion: int = 0
+    store_id: int = Field(default=1, ge=1, le=45)
+    day_of_week: int = Field(
+        default_factory=lambda: datetime.now().weekday(),
+        ge=0,
+        le=6,
+    )
+    is_weekend: int = Field(default=0, ge=0, le=1)
+    is_holiday: int = Field(default=0, ge=0, le=1)
+    promotion: int = Field(default=0, ge=0, le=1)
     temperature: float = 20.0
-    current_stock: int = 100
-    unit_price: float = 10.0
-    expiry_days: int = 5
+    current_stock: int = Field(default=100, ge=0)
+    unit_price: float = Field(default=10.0, gt=0)
+    expiry_days: int = Field(default=5, ge=0)
 
 
 @app.on_event("startup")
@@ -67,346 +83,573 @@ def load_model():
     return joblib.load(MODEL_PATH)
 
 
-def encode_product(product_name):
-    if product_name.startswith("Dept_"):
-        try:
-            return int(product_name.replace("Dept_", ""))
-        except ValueError:
-            return 0
+def load_encoding_maps():
+    processed_path = "data/processed_food_sales.csv"
 
-    return 0
+    if not os.path.exists(processed_path):
+        raise FileNotFoundError(
+            "Processed dataset not found. Run preprocessing first."
+        )
+
+    df = pd.read_csv(
+        processed_path,
+        usecols=[
+            "product_name",
+            "product_encoded",
+            "category",
+            "category_encoded",
+        ],
+    )
+
+    product_map = (
+        df[
+            [
+                "product_name",
+                "product_encoded",
+            ]
+        ]
+        .drop_duplicates()
+        .set_index("product_name")["product_encoded"]
+        .to_dict()
+    )
+
+    category_map = (
+        df[
+            [
+                "category",
+                "category_encoded",
+            ]
+        ]
+        .drop_duplicates()
+        .set_index("category")["category_encoded"]
+        .to_dict()
+    )
+
+    return product_map, category_map
+
+
+def encode_product(product_name):
+    try:
+        product_map, _ = load_encoding_maps()
+        return int(product_map.get(product_name, 0))
+
+    except (FileNotFoundError, KeyError, ValueError):
+        return 0
 
 
 def encode_category(category):
-    category_map = {
-        "A": 0,
-        "B": 1,
-        "C": 2,
-        "General": 3
-    }
+    try:
+        _, category_map = load_encoding_maps()
+        return int(category_map.get(category, 0))
 
-    return category_map.get(category, 0)
+    except (FileNotFoundError, KeyError, ValueError):
+        return 0
 
 
 def build_prediction_features(data):
-    short_expiry = 1 if data.expiry_days <= 3 else 0
-    promotion_active = int(data.promotion)
+
+    short_expiry = int(
+        data.expiry_days <= 3
+    )
+
+    promotion_active = int(
+        data.promotion
+    )
 
     row = {
-        "product_encoded": encode_product(data.product_name),
-        "category_encoded": encode_category(data.category),
-        "store_id": int(data.store_id),
-        "day_of_week": int(data.day_of_week),
-        "is_weekend": int(data.is_weekend),
-        "is_holiday": int(data.is_holiday),
-        "promotion": int(data.promotion),
-        "temperature": float(data.temperature),
-        "unit_price": float(data.unit_price),
-        "expiry_days": int(data.expiry_days),
-        "short_expiry": int(short_expiry),
-        "promotion_active": int(promotion_active)
+        "product_encoded": encode_product(
+            data.product_name
+        ),
+        "category_encoded": encode_category(
+            data.category
+        ),
+        "store_id": int(
+            data.store_id
+        ),
+        "day_of_week": int(
+            data.day_of_week
+        ),
+        "is_weekend": int(
+            data.is_weekend
+        ),
+        "is_holiday": int(
+            data.is_holiday
+        ),
+        "promotion": int(
+            data.promotion
+        ),
+        "temperature": float(
+            data.temperature
+        ),
+        "unit_price": float(
+            data.unit_price
+        ),
+        "expiry_days": int(
+            data.expiry_days
+        ),
+        "short_expiry": short_expiry,
+        "promotion_active": promotion_active,
     }
 
-    input_df = pd.DataFrame([row])
+    input_df = pd.DataFrame(
+        [row]
+    )
 
     missing_columns = [
-        col for col in FEATURE_COLUMNS
-        if col not in input_df.columns
+        column
+        for column in FEATURE_COLUMNS
+        if column not in input_df.columns
     ]
 
     if missing_columns:
         raise ValueError(
-            f"Missing prediction feature columns: {missing_columns}"
+            f"Missing feature columns: {missing_columns}"
         )
 
-    return input_df[FEATURE_COLUMNS]
-
-
-def classify_waste_risk(predicted_demand, current_stock, expiry_days):
-    overstock = current_stock - predicted_demand
-
-    if overstock <= 0:
-        return "Low"
-
-    overstock_ratio = overstock / max(current_stock, 1)
-
-    if overstock_ratio >= 0.40 or expiry_days <= 2:
-        return "High"
-
-    if overstock_ratio >= 0.20 or expiry_days <= 5:
-        return "Medium"
-
-    return "Low"
-
-
-def make_recommendation(predicted_demand, current_stock, waste_risk):
-    safety_stock = 10
-
-    recommended_order_quantity = max(
-        0,
-        int(predicted_demand + safety_stock - current_stock)
-    )
-
-    if predicted_demand > current_stock:
-        recommendation = (
-            "Predicted demand is higher than current stock. "
-            "Increase the next order quantity to avoid stockout."
-        )
-
-    elif waste_risk == "High":
-        recommendation = (
-            "Current stock is much higher than predicted demand. "
-            "Reduce the next order quantity and consider promotion, "
-            "discounting, or faster stock rotation."
-        )
-
-    elif waste_risk == "Medium":
-        recommendation = (
-            "Inventory has moderate waste risk. "
-            "Monitor stock carefully and avoid over-ordering."
-        )
-
-    else:
-        recommendation = (
-            "Inventory level looks acceptable. "
-            "Continue with the normal ordering plan."
-        )
-
-    return recommended_order_quantity, recommendation
+    return input_df[
+        FEATURE_COLUMNS
+    ]
 
 
 @app.get("/")
 def root():
+
     return {
         "message": (
-            "AI-Driven Retail Demand Forecasting and Inventory Optimization API is running."
-        )
+            "Retail demand forecasting and "
+            "inventory decision-support API"
+        ),
+        "version": "2.1.0",
     }
 
 
 @app.get("/health")
 def health():
+
     return {
         "status": "healthy",
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
+        "model_available": os.path.exists(
+            MODEL_PATH
+        ),
     }
 
 
 @app.post("/sales-event")
-def sales_event(event: SalesEvent):
-    conn = get_connection()
-    cursor = conn.cursor()
+def receive_sales_event(
+    event: SalesEvent
+):
 
-    cursor.execute("""
-        INSERT INTO raw_food_sales (
-            product_name,
-            category,
-            store_id,
-            date,
-            day_of_week,
-            is_weekend,
-            is_holiday,
-            promotion,
-            temperature,
-            current_stock,
-            units_sold,
-            unit_price,
-            expiry_days,
-            waste_quantity,
-            source,
-            created_at
+    conn = get_connection()
+
+    try:
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            INSERT INTO raw_food_sales (
+                product_name,
+                category,
+                store_id,
+                date,
+                day_of_week,
+                is_weekend,
+                is_holiday,
+                promotion,
+                temperature,
+                current_stock,
+                units_sold,
+                unit_price,
+                expiry_days,
+                waste_quantity,
+                source,
+                created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event.product_name,
+                event.category,
+                event.store_id,
+                event.date,
+                event.day_of_week,
+                event.is_weekend,
+                event.is_holiday,
+                event.promotion,
+                event.temperature,
+                event.current_stock,
+                event.units_sold,
+                event.unit_price,
+                event.expiry_days,
+                event.waste_quantity,
+                event.source,
+                datetime.now().isoformat(),
+            ),
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        event.product_name,
-        event.category,
-        event.store_id,
-        event.date,
-        event.day_of_week,
-        event.is_weekend,
-        event.is_holiday,
-        event.promotion,
-        event.temperature,
-        event.current_stock,
-        event.units_sold,
-        event.unit_price,
-        event.expiry_days,
-        event.waste_quantity,
-        event.source,
-        datetime.now().isoformat()
-    ))
 
-    conn.commit()
-    conn.close()
+        record_id = cursor.lastrowid
+
+        conn.commit()
+
+    finally:
+        conn.close()
 
     return {
-        "message": "Sales event inserted successfully through API.",
-        "event": event.dict()
-    }
-
-
-@app.get("/latest-sales")
-def latest_sales(limit: int = 10):
-    conn = get_connection()
-
-    df = pd.read_sql_query(
-        "SELECT * FROM raw_food_sales ORDER BY id DESC LIMIT ?",
-        conn,
-        params=(limit,)
-    )
-
-    conn.close()
-
-    return df.to_dict(orient="records")
-
-
-@app.post("/run-pipeline")
-def run_pipeline():
-    processed_df = preprocess_data()
-    metrics = train_model()
-
-    return {
-        "message": "Preprocessing and training completed successfully.",
-        "processed_rows": len(processed_df),
-        "metrics": metrics
+        "status": "success",
+        "message": "Sales event stored successfully.",
+        "record_id": record_id,
+        "source": event.source,
     }
 
 
 @app.post("/predict-demand")
-def predict_demand(data: PredictionRequest):
+def predict_demand(
+    data: PredictionRequest
+):
+
     model = load_model()
 
     if model is None:
-        return {
-            "error": "Model not found. Please run python -m src.train first."
-        }
-
-    input_df = build_prediction_features(data)
-
-    predicted_demand = float(model.predict(input_df)[0])
-
-    waste_risk = classify_waste_risk(
-        predicted_demand=predicted_demand,
-        current_stock=data.current_stock,
-        expiry_days=data.expiry_days
-    )
-
-    recommended_order_quantity, recommendation = make_recommendation(
-        predicted_demand=predicted_demand,
-        current_stock=data.current_stock,
-        waste_risk=waste_risk
-    )
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        INSERT INTO prediction_logs (
-            predicted_demand,
-            current_stock,
-            waste_risk,
-            created_at
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "No trained model found. "
+                "Run python -m src.train first."
+            ),
         )
-        VALUES (?, ?, ?, ?)
-    """, (
-        predicted_demand,
-        data.current_stock,
-        waste_risk,
-        datetime.now().isoformat()
-    ))
 
-    conn.commit()
-    conn.close()
+    try:
+        input_df = build_prediction_features(
+            data
+        )
 
-    return {
-        "predicted_demand": round(predicted_demand, 2),
-        "current_stock": data.current_stock,
-        "waste_risk": waste_risk,
-        "recommended_order_quantity": recommended_order_quantity,
-        "recommendation": recommendation
-    }
+        predicted_demand = float(
+            model.predict(input_df)[0]
+        )
 
+        predicted_demand = max(
+            0.0,
+            predicted_demand,
+        )
 
-@app.get("/prediction-logs")
-def prediction_logs(limit: int = 20):
-    conn = get_connection()
+        inventory = assess_inventory(
+            predicted_demand=predicted_demand,
+            current_stock=data.current_stock,
+            expiry_days=data.expiry_days,
+        )
 
-    df = pd.read_sql_query(
-        "SELECT * FROM prediction_logs ORDER BY id DESC LIMIT ?",
-        conn,
-        params=(limit,)
-    )
+        recommendation = generate_recommendation(
+            predicted_demand=predicted_demand,
+            current_stock=data.current_stock,
+            inventory_status=inventory[
+                "inventory_status"
+            ],
+            expiry_status=inventory[
+                "expiry_status"
+            ],
+            promotion=data.promotion,
+            holiday=data.is_holiday,
+            waste_risk=inventory[
+                "waste_risk"
+            ],
+        )
 
-    conn.close()
+        safety_stock = max(
+            5,
+            round(
+                predicted_demand * 0.10
+            ),
+        )
 
-    return df.to_dict(orient="records")
+        recommended_order_quantity = max(
+            0,
+            round(
+                predicted_demand
+                + safety_stock
+                - data.current_stock
+            ),
+        )
 
+        conn = get_connection()
 
-@app.get("/model-info")
-def model_info():
-    conn = get_connection()
+        try:
+            cursor = conn.cursor()
 
-    df = pd.read_sql_query(
-        "SELECT * FROM model_registry ORDER BY id DESC LIMIT 1",
-        conn
-    )
+            cursor.execute(
+                """
+                INSERT INTO prediction_logs (
+                    predicted_demand,
+                    current_stock,
+                    inventory_status,
+                    expiry_status,
+                    recommendation,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    predicted_demand,
+                    data.current_stock,
+                    inventory[
+                        "inventory_status"
+                    ],
+                    inventory[
+                        "expiry_status"
+                    ],
+                    recommendation,
+                    datetime.now().isoformat(),
+                ),
+            )
 
-    conn.close()
+            conn.commit()
 
-    if df.empty:
+        finally:
+            conn.close()
+
         return {
-            "message": "No model information found."
+            "predicted_demand": round(
+                predicted_demand,
+                2,
+            ),
+            "current_stock": data.current_stock,
+            "inventory_gap": inventory[
+                "inventory_gap"
+            ],
+            "inventory_status": inventory[
+                "inventory_status"
+            ],
+            "expiry_status": inventory[
+                "expiry_status"
+            ],
+            "waste_risk": inventory[
+                "waste_risk"
+            ],
+            "suggested_action": inventory[
+                "suggested_action"
+            ],
+            "safety_stock": safety_stock,
+            "recommended_order_quantity": (
+                recommended_order_quantity
+            ),
+            "recommendation": recommendation,
         }
 
-    return df.to_dict(orient="records")[0]
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=str(error),
+        ) from error
 
 
-@app.get("/model-comparison")
-def model_comparison():
-    comparison_path = "artifacts/model_comparison.csv"
+@app.post("/run-pipeline")
+def run_pipeline():
 
-    if not os.path.exists(comparison_path):
+    try:
+        processed_df = preprocess_data()
+        metrics = train_model()
+
         return {
-            "message": "No model comparison file found. Run training first."
+            "status": "completed",
+            "processed_rows": len(
+                processed_df
+            ),
+            "metrics": metrics,
         }
 
-    df = pd.read_csv(comparison_path)
-
-    return df.to_dict(orient="records")
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=str(error),
+        ) from error
 
 
 @app.post("/drift-check")
 def drift_check():
-    return run_drift_check()
 
+    try:
+        return run_drift_check()
 
-@app.get("/drift-reports")
-def drift_reports(limit: int = 20):
-    conn = get_connection()
-
-    df = pd.read_sql_query(
-        "SELECT * FROM drift_reports ORDER BY id DESC LIMIT ?",
-        conn,
-        params=(limit,)
-    )
-
-    conn.close()
-
-    return df.to_dict(orient="records")
-
-
-@app.post("/retrain")
-def retrain():
-    processed_df = preprocess_data()
-    metrics = train_model()
-
-    return {
-        "message": "Manual retraining completed successfully.",
-        "processed_rows": len(processed_df),
-        "metrics": metrics
-    }
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=str(error),
+        ) from error
 
 
 @app.post("/auto-retrain")
-def auto_retrain_endpoint():
-    return auto_retrain()
+def run_auto_retrain():
+
+    try:
+        return auto_retrain()
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=str(error),
+        ) from error
+
+
+@app.get("/model-info")
+def model_info():
+
+    conn = get_connection()
+
+    try:
+        query = """
+            SELECT *
+            FROM model_registry
+            ORDER BY id DESC
+            LIMIT 1
+        """
+
+        df = pd.read_sql_query(
+            query,
+            conn,
+        )
+
+    finally:
+        conn.close()
+
+    if df.empty:
+        return {
+            "message": "No registered model found."
+        }
+
+    return df.iloc[0].to_dict()
+
+
+@app.get("/model-comparison")
+def model_comparison():
+
+    comparison_path = (
+        "artifacts/model_comparison.csv"
+    )
+
+    if not os.path.exists(
+        comparison_path
+    ):
+        return {
+            "message": (
+                "No model comparison found. "
+                "Run model training first."
+            )
+        }
+
+    df = pd.read_csv(
+        comparison_path
+    )
+
+    return df.to_dict(
+        orient="records"
+    )
+
+
+@app.get("/latest-sales")
+def latest_sales(
+    limit: int = 20
+):
+
+    limit = max(
+        1,
+        min(
+            limit,
+            100,
+        ),
+    )
+
+    conn = get_connection()
+
+    try:
+        query = """
+            SELECT *
+            FROM raw_food_sales
+            ORDER BY id DESC
+            LIMIT ?
+        """
+
+        df = pd.read_sql_query(
+            query,
+            conn,
+            params=(limit,),
+        )
+
+    finally:
+        conn.close()
+
+    return df.to_dict(
+        orient="records"
+    )
+
+
+@app.get("/prediction-logs")
+def prediction_logs(
+    limit: int = 20
+):
+
+    limit = max(
+        1,
+        min(
+            limit,
+            100,
+        ),
+    )
+
+    conn = get_connection()
+
+    try:
+        query = """
+            SELECT *
+            FROM prediction_logs
+            ORDER BY id DESC
+            LIMIT ?
+        """
+
+        df = pd.read_sql_query(
+            query,
+            conn,
+            params=(limit,),
+        )
+
+    finally:
+        conn.close()
+
+    return df.to_dict(
+        orient="records"
+    )
+
+
+@app.get("/drift-reports")
+def drift_reports(
+    limit: int = 20
+):
+
+    limit = max(
+        1,
+        min(
+            limit,
+            100,
+        ),
+    )
+
+    conn = get_connection()
+
+    try:
+        query = """
+            SELECT *
+            FROM drift_reports
+            ORDER BY id DESC
+            LIMIT ?
+        """
+
+        df = pd.read_sql_query(
+            query,
+            conn,
+            params=(limit,),
+        )
+
+    finally:
+        conn.close()
+
+    return df.to_dict(
+        orient="records"
+    )

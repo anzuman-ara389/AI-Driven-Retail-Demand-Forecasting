@@ -1,0 +1,13 @@
+feature,importance,model_name
+product_encoded,0.46358249951257946,RandomForestRegressor
+store_id,0.18088022994095507,RandomForestRegressor
+expiry_days,0.16932599170227117,RandomForestRegressor
+category_encoded,0.11354001792754415,RandomForestRegressor
+temperature,0.05248996938203037,RandomForestRegressor
+is_holiday,0.00851234179481129,RandomForestRegressor
+short_expiry,0.007083075940590933,RandomForestRegressor
+promotion_active,0.0023027239428682626,RandomForestRegressor
+promotion,0.002283149856349393,RandomForestRegressor
+day_of_week,0.0,RandomForestRegressor
+is_weekend,0.0,RandomForestRegressor
+unit_price,0.0,RandomForestRegressor

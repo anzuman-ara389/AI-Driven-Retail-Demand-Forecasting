@@ -40,14 +40,15 @@ def init_db():
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS prediction_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        predicted_demand REAL,
-        current_stock INTEGER,
-        waste_risk TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    """)
-
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    predicted_demand REAL,
+    current_stock INTEGER,
+    inventory_status TEXT,
+    expiry_status TEXT,
+    recommendation TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+""")
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS drift_reports (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

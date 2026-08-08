@@ -4,7 +4,9 @@ streamlit
 pandas
 numpy
 scikit-learn
-lightgbm
+xgboost
+openai
+python-dotenv
 joblib
 requests
 python-multipart
