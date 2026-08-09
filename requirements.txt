@@ -5,7 +5,6 @@ pandas
 numpy
 scikit-learn
 xgboost
-openai
 python-dotenv
 joblib
 requests

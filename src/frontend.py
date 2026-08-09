@@ -421,7 +421,7 @@ if menu == "Predict Demand":
             )
 
             st.subheader(
-                "Intelligent Recommendation"
+                "LLM-Powered Intelligent Recommendation"
             )
 
             st.success(
@@ -430,6 +430,43 @@ if menu == "Predict Demand":
                     "No recommendation available.",
                 )
             )
+
+            recommendation_source = result.get(
+                "recommendation_source",
+                "unknown",
+            )
+
+            llm_model = result.get(
+                "llm_model",
+                "not_available",
+            )
+
+            source_col, model_col = st.columns(
+                2
+            )
+
+            source_col.metric(
+                "Recommendation Source",
+                recommendation_source,
+            )
+
+            model_col.metric(
+                "LLM Model",
+                llm_model,
+            )
+
+            if recommendation_source == "local_llm_qwen2.5":
+
+                st.success(
+                    "Local LLM recommendation generated successfully."
+                )
+
+            else:
+
+                st.warning(
+                    "Fallback recommendation used because the local LLM "
+                    "was not available."
+                )
 
             with st.expander(
                 "View complete API response"

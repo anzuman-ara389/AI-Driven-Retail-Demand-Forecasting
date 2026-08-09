@@ -22,53 +22,133 @@ app = FastAPI(
     ),
     description=(
         "Demand forecasting, inventory assessment, "
-        "waste-risk classification, monitoring, "
-        "recommendation, and retraining."
+        "waste-risk classification, local LLM recommendation, "
+        "monitoring, and retraining."
     ),
-    version="2.1.0",
+    version="2.2.0",
 )
 
 
 class SalesEvent(BaseModel):
     product_name: str = "Dept_1"
     category: str = "A"
-    store_id: int = Field(default=1, ge=1, le=45)
-    date: str = Field(
-        default_factory=lambda: datetime.now().strftime("%Y-%m-%d")
+
+    store_id: int = Field(
+        default=1,
+        ge=1,
+        le=45,
     )
+
+    date: str = Field(
+        default_factory=lambda: datetime.now().strftime(
+            "%Y-%m-%d"
+        )
+    )
+
     day_of_week: int = Field(
         default_factory=lambda: datetime.now().weekday(),
         ge=0,
         le=6,
     )
-    is_weekend: int = Field(default=0, ge=0, le=1)
-    is_holiday: int = Field(default=0, ge=0, le=1)
-    promotion: int = Field(default=0, ge=0, le=1)
+
+    is_weekend: int = Field(
+        default=0,
+        ge=0,
+        le=1,
+    )
+
+    is_holiday: int = Field(
+        default=0,
+        ge=0,
+        le=1,
+    )
+
+    promotion: int = Field(
+        default=0,
+        ge=0,
+        le=1,
+    )
+
     temperature: float = 20.0
-    current_stock: int = Field(default=100, ge=0)
-    units_sold: int = Field(default=60, ge=0)
-    unit_price: float = Field(default=10.0, gt=0)
-    expiry_days: int = Field(default=5, ge=0)
-    waste_quantity: int = Field(default=0, ge=0)
+
+    current_stock: int = Field(
+        default=100,
+        ge=0,
+    )
+
+    units_sold: int = Field(
+        default=60,
+        ge=0,
+    )
+
+    unit_price: float = Field(
+        default=10.0,
+        gt=0,
+    )
+
+    expiry_days: int = Field(
+        default=5,
+        ge=0,
+    )
+
+    waste_quantity: int = Field(
+        default=0,
+        ge=0,
+    )
+
     source: str = "api_event"
 
 
 class PredictionRequest(BaseModel):
     product_name: str = "Dept_1"
     category: str = "A"
-    store_id: int = Field(default=1, ge=1, le=45)
+
+    store_id: int = Field(
+        default=1,
+        ge=1,
+        le=45,
+    )
+
     day_of_week: int = Field(
         default_factory=lambda: datetime.now().weekday(),
         ge=0,
         le=6,
     )
-    is_weekend: int = Field(default=0, ge=0, le=1)
-    is_holiday: int = Field(default=0, ge=0, le=1)
-    promotion: int = Field(default=0, ge=0, le=1)
+
+    is_weekend: int = Field(
+        default=0,
+        ge=0,
+        le=1,
+    )
+
+    is_holiday: int = Field(
+        default=0,
+        ge=0,
+        le=1,
+    )
+
+    promotion: int = Field(
+        default=0,
+        ge=0,
+        le=1,
+    )
+
     temperature: float = 20.0
-    current_stock: int = Field(default=100, ge=0)
-    unit_price: float = Field(default=10.0, gt=0)
-    expiry_days: int = Field(default=5, ge=0)
+
+    current_stock: int = Field(
+        default=100,
+        ge=0,
+    )
+
+    unit_price: float = Field(
+        default=10.0,
+        gt=0,
+    )
+
+    expiry_days: int = Field(
+        default=5,
+        ge=0,
+    )
 
 
 @app.on_event("startup")
@@ -88,7 +168,8 @@ def load_encoding_maps():
 
     if not os.path.exists(processed_path):
         raise FileNotFoundError(
-            "Processed dataset not found. Run preprocessing first."
+            "Processed dataset not found. "
+            "Run preprocessing first."
         )
 
     df = pd.read_csv(
@@ -109,7 +190,9 @@ def load_encoding_maps():
             ]
         ]
         .drop_duplicates()
-        .set_index("product_name")["product_encoded"]
+        .set_index(
+            "product_name"
+        )["product_encoded"]
         .to_dict()
     )
 
@@ -121,7 +204,9 @@ def load_encoding_maps():
             ]
         ]
         .drop_duplicates()
-        .set_index("category")["category_encoded"]
+        .set_index(
+            "category"
+        )["category_encoded"]
         .to_dict()
     )
 
@@ -131,18 +216,38 @@ def load_encoding_maps():
 def encode_product(product_name):
     try:
         product_map, _ = load_encoding_maps()
-        return int(product_map.get(product_name, 0))
 
-    except (FileNotFoundError, KeyError, ValueError):
+        return int(
+            product_map.get(
+                product_name,
+                0,
+            )
+        )
+
+    except (
+        FileNotFoundError,
+        KeyError,
+        ValueError,
+    ):
         return 0
 
 
 def encode_category(category):
     try:
         _, category_map = load_encoding_maps()
-        return int(category_map.get(category, 0))
 
-    except (FileNotFoundError, KeyError, ValueError):
+        return int(
+            category_map.get(
+                category,
+                0,
+            )
+        )
+
+    except (
+        FileNotFoundError,
+        KeyError,
+        ValueError,
+    ):
         return 0
 
 
@@ -203,7 +308,8 @@ def build_prediction_features(data):
 
     if missing_columns:
         raise ValueError(
-            f"Missing feature columns: {missing_columns}"
+            f"Missing feature columns: "
+            f"{missing_columns}"
         )
 
     return input_df[
@@ -217,9 +323,10 @@ def root():
     return {
         "message": (
             "Retail demand forecasting and "
-            "inventory decision-support API"
+            "intelligent inventory decision-support API"
         ),
-        "version": "2.1.0",
+        "version": "2.2.0",
+        "llm": "Qwen2.5:1.5B via Ollama",
     }
 
 
@@ -232,6 +339,7 @@ def health():
         "model_available": os.path.exists(
             MODEL_PATH
         ),
+        "llm_model": "qwen2.5:1.5b",
     }
 
 
@@ -296,7 +404,9 @@ def receive_sales_event(
 
     return {
         "status": "success",
-        "message": "Sales event stored successfully.",
+        "message": (
+            "Sales event stored successfully."
+        ),
         "record_id": record_id,
         "source": event.source,
     }
@@ -324,7 +434,9 @@ def predict_demand(
         )
 
         predicted_demand = float(
-            model.predict(input_df)[0]
+            model.predict(
+                input_df
+            )[0]
         )
 
         predicted_demand = max(
@@ -338,7 +450,7 @@ def predict_demand(
             expiry_days=data.expiry_days,
         )
 
-        recommendation = generate_recommendation(
+        recommendation_result = generate_recommendation(
             predicted_demand=predicted_demand,
             current_stock=data.current_stock,
             inventory_status=inventory[
@@ -353,6 +465,14 @@ def predict_demand(
                 "waste_risk"
             ],
         )
+
+        recommendation = recommendation_result[
+            "recommendation"
+        ]
+
+        recommendation_source = recommendation_result[
+            "recommendation_source"
+        ]
 
         safety_stock = max(
             5,
@@ -411,7 +531,9 @@ def predict_demand(
                 predicted_demand,
                 2,
             ),
-            "current_stock": data.current_stock,
+            "current_stock": (
+                data.current_stock
+            ),
             "inventory_gap": inventory[
                 "inventory_gap"
             ],
@@ -432,12 +554,18 @@ def predict_demand(
                 recommended_order_quantity
             ),
             "recommendation": recommendation,
+            "recommendation_source": (
+                recommendation_source
+            ),
+            "llm_model": "qwen2.5:1.5b",
         }
 
     except Exception as error:
         raise HTTPException(
             status_code=500,
-            detail=str(error),
+            detail=str(
+                error
+            ),
         ) from error
 
 
@@ -446,6 +574,7 @@ def run_pipeline():
 
     try:
         processed_df = preprocess_data()
+
         metrics = train_model()
 
         return {
@@ -459,7 +588,9 @@ def run_pipeline():
     except Exception as error:
         raise HTTPException(
             status_code=500,
-            detail=str(error),
+            detail=str(
+                error
+            ),
         ) from error
 
 
@@ -472,7 +603,9 @@ def drift_check():
     except Exception as error:
         raise HTTPException(
             status_code=500,
-            detail=str(error),
+            detail=str(
+                error
+            ),
         ) from error
 
 
@@ -485,7 +618,9 @@ def run_auto_retrain():
     except Exception as error:
         raise HTTPException(
             status_code=500,
-            detail=str(error),
+            detail=str(
+                error
+            ),
         ) from error
 
 
@@ -512,10 +647,14 @@ def model_info():
 
     if df.empty:
         return {
-            "message": "No registered model found."
+            "message": (
+                "No registered model found."
+            )
         }
 
-    return df.iloc[0].to_dict()
+    return df.iloc[
+        0
+    ].to_dict()
 
 
 @app.get("/model-comparison")
@@ -570,7 +709,9 @@ def latest_sales(
         df = pd.read_sql_query(
             query,
             conn,
-            params=(limit,),
+            params=(
+                limit,
+            ),
         )
 
     finally:
@@ -607,7 +748,9 @@ def prediction_logs(
         df = pd.read_sql_query(
             query,
             conn,
-            params=(limit,),
+            params=(
+                limit,
+            ),
         )
 
     finally:
@@ -644,7 +787,9 @@ def drift_reports(
         df = pd.read_sql_query(
             query,
             conn,
-            params=(limit,),
+            params=(
+                limit,
+            ),
         )
 
     finally:
